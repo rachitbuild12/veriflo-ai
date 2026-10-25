@@ -49,9 +49,12 @@ export const SettingsPage: React.FC = () => {
     reply?: string;
   } | null>(null);
 
+  // Backend API Base URL
+  const apiBase = (import.meta.env.VITE_API_URL ? (import.meta.env.VITE_API_URL as string).replace(/\/$/, '') : 'http://127.0.0.1:8000') + '/api';
+
   // Load NIM status from backend
   useEffect(() => {
-    fetch('http://localhost:8000/api/verification/nim/status')
+    fetch(`${apiBase}/verification/nim/status`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data) {
@@ -63,13 +66,13 @@ export const SettingsPage: React.FC = () => {
       .catch(() => {
         // Backend not running locally right now - default to offline display
       });
-  }, []);
+  }, [apiBase]);
 
   const handleTestNimConnection = async () => {
     setNimTesting(true);
     setNimTestResult(null);
     try {
-      const res = await fetch('http://localhost:8000/api/verification/nim/test', {
+      const res = await fetch(`${apiBase}/verification/nim/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -83,7 +86,7 @@ export const SettingsPage: React.FC = () => {
         setNimTestResult(data);
         if (data.success) {
           addToast('success', `NVIDIA NIM responded in ${data.latency_ms}ms with active model ${nimModel}`, 'NVIDIA NIM Connected');
-          logAuditAction(`NVIDIA NIM Connection Verified (${nimModel}, ${data.latency_ms}ms)`, 'AI Infrastructure', 'VERIFY', 'Info');
+          logAuditAction(`NVIDIA NIM Connection Verified (${nimModel}, ${data.latency_ms}ms)`, 'AI Infrastructure', 'AI_SCAN', 'Info');
         } else {
           addToast('warning', data.message || 'NVIDIA NIM connection check returned non-zero response.', 'NIM Status');
         }

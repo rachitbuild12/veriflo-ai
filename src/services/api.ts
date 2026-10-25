@@ -182,7 +182,7 @@ export interface RuleVersionOption {
   description: string;
 }
 
-const API_BASE = 'http://127.0.0.1:8000/api';
+const API_BASE = (import.meta.env.VITE_API_URL ? (import.meta.env.VITE_API_URL as string).replace(/\/$/, '') : 'http://127.0.0.1:8000') + '/api';
 
 export const checkBackendHealth = async (): Promise<{
   online: boolean;
