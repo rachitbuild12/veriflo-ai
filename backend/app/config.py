@@ -20,7 +20,12 @@ class Settings(BaseModel):
         "image/jpeg",
         "image/pjpeg"
     }
-    # Gemini API key stored exclusively in environment variables
+    # NVIDIA NIM (Inference Microservice) Configuration
+    NVIDIA_NIM_API_KEY: str = os.getenv("NVIDIA_NIM_API_KEY", "")
+    NVIDIA_NIM_BASE_URL: str = os.getenv("NVIDIA_NIM_BASE_URL", "https://integrate.api.nvidia.com/v1")
+    NVIDIA_NIM_MODEL: str = os.getenv("NVIDIA_NIM_MODEL", "meta/llama-3.3-70b-instruct")
+
+    # Gemini API key stored exclusively in environment variables (Fallback)
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     CORS_ORIGINS: list = [
         "http://localhost:5173",

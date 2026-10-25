@@ -92,3 +92,20 @@ def test_upload_valid_minimal_pdf_and_duplicate_detection():
     dup_finding = [f for f in res2_data["findings"] if f["rule_id"] == "RULE-DUP-004"][0]
     assert dup_finding["passed"] is False
     assert dup_finding["severity"] == "Critical"
+
+def test_nvidia_nim_status_endpoint():
+    response = client.get("/api/verification/nim/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert "configured" in data
+    assert "base_url" in data
+    assert "recommended_models" in data
+    assert "meta/llama-3.3-70b-instruct" in data["recommended_models"]
+
+def test_nvidia_nim_test_unconfigured():
+    # Calling test without an API key should return clean structured status
+    response = client.post("/api/verification/nim/test", json={})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is False
+    assert data["status"] == "not_configured"

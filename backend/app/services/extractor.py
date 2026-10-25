@@ -49,8 +49,11 @@ class DocumentExtractor:
         # Parse entities from extracted text
         extracted_data = self._parse_entities(raw_text_by_page)
         
-        # Check if Gemini API is available and can enrich/validate
-        if settings.GEMINI_API_KEY:
+        # Check if AI Multimodal / LLM API is available and can enrich/validate
+        # NVIDIA NIM is prioritized when configured, with Gemini as alternative
+        if settings.NVIDIA_NIM_API_KEY:
+            extracted_data = self._enrich_with_nvidia_nim(raw_text_by_page, extracted_data)
+        elif settings.GEMINI_API_KEY:
             extracted_data = self._enrich_with_gemini(raw_text_by_page, extracted_data)
 
         return extracted_data, metadata, ocr_engine_used
@@ -303,6 +306,99 @@ class DocumentExtractor:
         elif "balance sheet" in text_lower or "fixed deposit" in text_lower or "corpus" in text_lower or "chartered accountant" in text_lower:
             return "Audited Balance Sheet & Corpus FD"
         return "Regulatory Document"
+
+    def _enrich_with_nvidia_nim(self, text_by_page: Dict[int, str], current_data: ExtractedEntityData) -> ExtractedEntityData:
+        """
+        Optional enrichment using NVIDIA NIM (Inference Microservice) API.
+        Extracts structured institutional identifiers, certificates, faculty rosters, and approved intake.
+        Preserves local extraction if API call fails.
+        """
+        try:
+            import httpx
+
+            sample_text = "\n".join([f"Page {p}: {t[:1200]}" for p, t in list(text_by_page.items())[:3]])
+            system_prompt = (
+                "You are an AICTE Regulatory Verification AI specialist. "
+                "Extract structured institutional data from document text. "
+                "Respond ONLY with a valid JSON object matching the requested schema. Do not output markdown, preambles, or explanations."
+            )
+            user_prompt = f"""Extract the following fields from this regulatory document excerpt:
+- institution_id (string, e.g. 1-10923412 or Permanent Institute ID)
+- institution_name (string, legal name of institute or trust)
+- certificate_number (string, order/letter/NOC reference code)
+- document_type (string, detected document title)
+- issue_date (string, YYYY-MM-DD or as printed)
+- expiry_date (string, YYYY-MM-DD or as printed)
+- approved_intake_total (number or null)
+- faculty_members (array of {{"name": string, "qualification": string, "designation": string}})
+
+Document excerpt:
+{sample_text}
+"""
+            endpoint = f"{settings.NVIDIA_NIM_BASE_URL.rstrip('/')}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {settings.NVIDIA_NIM_API_KEY}",
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+            payload = {
+                "model": settings.NVIDIA_NIM_MODEL,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.1,
+                "max_tokens": 1500,
+                "top_p": 0.7
+            }
+
+            with httpx.Client(timeout=30.0) as client:
+                res = client.post(endpoint, headers=headers, json=payload)
+                if res.status_code == 200:
+                    resp_data = res.json()
+                    raw_content = resp_data["choices"][0]["message"]["content"].strip()
+                    # Strip markdown fence if present
+                    if "```" in raw_content:
+                        raw_content = re.sub(r"^```(?:json)?\s*", "", raw_content, flags=re.MULTILINE)
+                        raw_content = re.sub(r"\s*```$", "", raw_content, flags=re.MULTILINE).strip()
+
+                    parsed = json.loads(raw_content)
+                    if not current_data.institution_id and parsed.get("institution_id"):
+                        current_data.institution_id = str(parsed["institution_id"]).strip()
+                    if not current_data.institution_name and parsed.get("institution_name"):
+                        current_data.institution_name = str(parsed["institution_name"]).strip()
+                    if not current_data.certificate_number and parsed.get("certificate_number"):
+                        current_data.certificate_number = str(parsed["certificate_number"]).strip()
+                    if not current_data.document_type_detected or current_data.document_type_detected == "Regulatory Document":
+                        if parsed.get("document_type"):
+                            current_data.document_type_detected = str(parsed["document_type"]).strip()
+                    if parsed.get("expiry_date") and "expiry_date" not in current_data.dates:
+                        current_data.dates["expiry_date"] = str(parsed["expiry_date"]).strip()
+                    if parsed.get("issue_date") and "issue_date" not in current_data.dates:
+                        current_data.dates["issue_date"] = str(parsed["issue_date"]).strip()
+                    if not current_data.approved_intake_total and parsed.get("approved_intake_total"):
+                        try:
+                            current_data.approved_intake_total = int(parsed["approved_intake_total"])
+                        except (ValueError, TypeError):
+                            pass
+
+                    # Extract faculty if local regex did not capture any
+                    if not current_data.faculty_members and parsed.get("faculty_members"):
+                        for f in parsed["faculty_members"]:
+                            if isinstance(f, dict) and f.get("name"):
+                                current_data.faculty_members.append(FacultyMember(
+                                    name=f.get("name", "").strip(),
+                                    qualification=f.get("qualification", "").strip(),
+                                    designation=f.get("designation", "").strip().title(),
+                                    cadre=f.get("designation", "").strip().title(),
+                                    page_ref=1
+                                ))
+                else:
+                    print(f"Notice: NVIDIA NIM API responded with status {res.status_code}")
+        except Exception as e:
+            print(f"Notice: NVIDIA NIM enrichment skipped/failed: {e}")
+
+        return current_data
 
     def _enrich_with_gemini(self, text_by_page: Dict[int, str], current_data: ExtractedEntityData) -> ExtractedEntityData:
         """

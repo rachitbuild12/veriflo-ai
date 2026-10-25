@@ -1,9 +1,17 @@
 from typing import List, Dict, Any, Optional
+import time
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
+from ..config import settings
 from ..schemas import RuleDefinition
 from ..services.storage import StorageService
 
 router = APIRouter(prefix="/verification", tags=["Verification Records & Compliance Rules"])
+
+class NimTestRequest(BaseModel):
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+    base_url: Optional[str] = None
 
 @router.get("/results")
 def list_verification_results() -> List[Dict[str, Any]]:
@@ -90,3 +98,92 @@ def get_compliance_rules() -> List[RuleDefinition]:
             severity="Critical"
         )
     ]
+
+@router.get("/nim/status")
+def get_nvidia_nim_status() -> Dict[str, Any]:
+    """Retrieve current NVIDIA NIM configuration and active model status."""
+    has_key = bool(settings.NVIDIA_NIM_API_KEY)
+    masked_key = ""
+    if has_key:
+        k = settings.NVIDIA_NIM_API_KEY
+        masked_key = f"{k[:7]}...{k[-4:]}" if len(k) > 12 else "***configured***"
+        
+    return {
+        "configured": has_key,
+        "masked_key": masked_key,
+        "base_url": settings.NVIDIA_NIM_BASE_URL,
+        "active_model": settings.NVIDIA_NIM_MODEL,
+        "recommended_models": [
+            "meta/llama-3.3-70b-instruct",
+            "nvidia/llama-3.1-nemotron-70b-instruct",
+            "meta/llama-3.1-8b-instruct",
+            "meta/llama-3.2-11b-vision-instruct"
+        ],
+        "active_llm_provider": "nvidia_nim" if has_key else ("gemini" if settings.GEMINI_API_KEY else "offline_deterministic")
+    }
+
+@router.post("/nim/test")
+def test_nvidia_nim_connection(req: Optional[NimTestRequest] = None) -> Dict[str, Any]:
+    """Execute a live ping test against the NVIDIA NIM endpoint."""
+    api_key = (req.api_key if req and req.api_key else None) or settings.NVIDIA_NIM_API_KEY
+    if not api_key:
+        return {
+            "success": False,
+            "status": "not_configured",
+            "message": "NVIDIA_NIM_API_KEY is not configured in backend/.env or passed in request."
+        }
+        
+    model = (req.model if req and req.model else None) or settings.NVIDIA_NIM_MODEL
+    base_url = (req.base_url if req and req.base_url else None) or settings.NVIDIA_NIM_BASE_URL
+    endpoint = f"{base_url.rstrip('/')}/chat/completions"
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "You are a regulatory verification engine health probe. Respond with a concise status."},
+            {"role": "user", "content": "Respond with: VERIFLO_NIM_READY"}
+        ],
+        "max_tokens": 15,
+        "temperature": 0.1
+    }
+    
+    start_time = time.time()
+    try:
+        import httpx
+        with httpx.Client(timeout=15.0) as client:
+            res = client.post(endpoint, headers=headers, json=payload)
+            elapsed_ms = round((time.time() - start_time) * 1000, 1)
+            
+            if res.status_code == 200:
+                body = res.json()
+                msg = body["choices"][0]["message"]["content"].strip()
+                return {
+                    "success": True,
+                    "status": "connected",
+                    "latency_ms": elapsed_ms,
+                    "model": model,
+                    "endpoint": base_url,
+                    "reply": msg,
+                    "message": f"Successfully connected to NVIDIA NIM ({model}) in {elapsed_ms}ms."
+                }
+            else:
+                return {
+                    "success": False,
+                    "status": "error",
+                    "status_code": res.status_code,
+                    "latency_ms": elapsed_ms,
+                    "message": f"NVIDIA NIM responded with error HTTP {res.status_code}: {res.text[:250]}"
+                }
+    except Exception as e:
+        elapsed_ms = round((time.time() - start_time) * 1000, 1)
+        return {
+            "success": False,
+            "status": "exception",
+            "latency_ms": elapsed_ms,
+            "message": f"Connection to NVIDIA NIM microservice failed: {str(e)}"
+        }

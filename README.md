@@ -83,7 +83,8 @@ The system enforces the **Approval Process Handbook (APH 2025–26)** norms and 
 
 ### Backend
 * **API Framework:** Python FastAPI (ASGI) + Uvicorn
-* **PDF Extraction:** PyMuPDF (`fitz`)
+* **AI & Neural Microservice:** NVIDIA NIM API (`meta/llama-3.3-70b-instruct`, `nvidia/llama-3.1-nemotron-70b-instruct`) with OpenAI-compatible REST endpoints
+* **PDF Extraction:** PyMuPDF (`fitz`) & PaddleOCR hybrid pipeline
 * **Storage:** Local encrypted private storage filesystem (`backend/storage`)
 * **Testing:** PyTest + PyTest-Asyncio
 
@@ -125,6 +126,15 @@ The system enforces the **Approval Process Handbook (APH 2025–26)** norms and 
    pip install -r requirements.txt
    cd ..
    ```
+
+4. **(Optional) Configure NVIDIA NIM Microservice:**
+   ```bash
+   cp backend/.env.example backend/.env
+   # Add your key from https://build.nvidia.com :
+   # NVIDIA_NIM_API_KEY=nvapi-...
+   # NVIDIA_NIM_MODEL=meta/llama-3.3-70b-instruct
+   ```
+   *Note: If no API key is supplied, Veriflo AI operates in 100% offline mode with deterministic PyMuPDF regex parsers.*
 
 ---
 

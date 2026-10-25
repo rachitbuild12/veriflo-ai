@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Award,
   Bot,
@@ -12,6 +12,13 @@ import {
   Sliders,
   Sun,
   UserCheck,
+  Cpu,
+  Zap,
+  Key,
+  ExternalLink,
+  Check,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { OfficerRole } from '../../types';
@@ -27,6 +34,76 @@ export const SettingsPage: React.FC = () => {
     addToast,
     logAuditAction,
   } = useApp();
+
+  // NVIDIA NIM Microservice State
+  const [nimApiKey, setNimApiKey] = useState('');
+  const [nimModel, setNimModel] = useState('meta/llama-3.3-70b-instruct');
+  const [nimConfigured, setNimConfigured] = useState(false);
+  const [nimMaskedKey, setNimMaskedKey] = useState('');
+  const [nimTesting, setNimTesting] = useState(false);
+  const [nimTestResult, setNimTestResult] = useState<{
+    success: boolean;
+    status: string;
+    message: string;
+    latency_ms?: number;
+    reply?: string;
+  } | null>(null);
+
+  // Load NIM status from backend
+  useEffect(() => {
+    fetch('http://localhost:8000/api/verification/nim/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) {
+          setNimConfigured(Boolean(data.configured));
+          if (data.masked_key) setNimMaskedKey(data.masked_key);
+          if (data.active_model) setNimModel(data.active_model);
+        }
+      })
+      .catch(() => {
+        // Backend not running locally right now - default to offline display
+      });
+  }, []);
+
+  const handleTestNimConnection = async () => {
+    setNimTesting(true);
+    setNimTestResult(null);
+    try {
+      const res = await fetch('http://localhost:8000/api/verification/nim/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: nimApiKey.trim() || undefined,
+          model: nimModel,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setNimTestResult(data);
+        if (data.success) {
+          addToast('success', `NVIDIA NIM responded in ${data.latency_ms}ms with active model ${nimModel}`, 'NVIDIA NIM Connected');
+          logAuditAction(`NVIDIA NIM Connection Verified (${nimModel}, ${data.latency_ms}ms)`, 'AI Infrastructure', 'VERIFY', 'Info');
+        } else {
+          addToast('warning', data.message || 'NVIDIA NIM connection check returned non-zero response.', 'NIM Status');
+        }
+      } else {
+        setNimTestResult({
+          success: false,
+          status: 'error',
+          message: `Backend returned HTTP ${res.status}. Ensure backend is running.`,
+        });
+      }
+    } catch (err: any) {
+      setNimTestResult({
+        success: false,
+        status: 'offline',
+        message: 'FastAPI backend service unreachable on http://localhost:8000. Start backend to verify live NIM.',
+      });
+    } finally {
+      setNimTesting(false);
+    }
+  };
 
   // AI Threshold Sliders
   const [ocrSensitivity, setOcrSensitivity] = useState(85);
@@ -54,6 +131,148 @@ export const SettingsPage: React.FC = () => {
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
           Configure AI inspection confidence bounds, active scrutiny cycle deadlines, and officer access privileges.
         </p>
+      </div>
+
+      {/* NVIDIA NIM Inference Microservice Integration */}
+      <div className="p-5 sm:p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold">
+              <Cpu className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  NVIDIA NIM AI Microservice Integration
+                </h3>
+                <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                  NVIDIA NIM v1 API
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Enterprise GPU-accelerated inference for AICTE document parsing, cadre validation, and cross-evidence reasoning
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold font-mono border ${
+                nimConfigured
+                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>{nimConfigured ? `NIM Active (${nimMaskedKey})` : 'Offline / Regex Fallback Active'}</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          {/* Model Selection */}
+          <div className="space-y-1.5">
+            <label className="font-semibold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+              <span>Target NVIDIA NIM Model:</span>
+              <a
+                href="https://build.nvidia.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1"
+              >
+                <span>NVIDIA Catalog</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </label>
+            <select
+              value={nimModel}
+              onChange={(e) => setNimModel(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-xs focus:ring-1 focus:ring-teal-500 focus:outline-none"
+            >
+              <option value="meta/llama-3.3-70b-instruct">meta/llama-3.3-70b-instruct (Recommended - 70B Deep Scrutiny)</option>
+              <option value="nvidia/llama-3.1-nemotron-70b-instruct">nvidia/llama-3.1-nemotron-70b-instruct (Structured JSON Alignment)</option>
+              <option value="meta/llama-3.1-8b-instruct">meta/llama-3.1-8b-instruct (Ultra-Low Latency Extraction)</option>
+              <option value="meta/llama-3.2-11b-vision-instruct">meta/llama-3.2-11b-vision-instruct (Multimodal Infrastructure Vision)</option>
+            </select>
+            <p className="text-[11px] text-slate-400">
+              OpenAI-compatible microservice hosted at <code className="text-teal-600 dark:text-teal-400 font-mono">https://integrate.api.nvidia.com/v1</code>.
+            </p>
+          </div>
+
+          {/* API Key Input */}
+          <div className="space-y-1.5">
+            <label className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <Key className="w-3.5 h-3.5 text-slate-400" />
+              <span>NVIDIA NIM API Key (Optional override):</span>
+            </label>
+            <input
+              type="password"
+              placeholder={nimConfigured ? `Configured in backend/.env (${nimMaskedKey})` : 'nvapi-xxxxxxxxxxxxxxxxxxxxxxxx'}
+              value={nimApiKey}
+              onChange={(e) => setNimApiKey(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-xs placeholder:text-slate-400 focus:ring-1 focus:ring-teal-500 focus:outline-none"
+            />
+            <p className="text-[11px] text-slate-400">
+              Set permanent key in <code className="text-teal-600 dark:text-teal-400 font-mono">backend/.env</code> as <code className="text-teal-600 dark:text-teal-400 font-mono">NVIDIA_NIM_API_KEY=nvapi-...</code>
+            </p>
+          </div>
+        </div>
+
+        {/* Live Test NIM Connection Bar */}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+          <div className="text-slate-500 dark:text-slate-400 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span>Deterministic PyMuPDF + PaddleOCR engines run locally with zero API latency.</span>
+          </div>
+
+          <button
+            onClick={handleTestNimConnection}
+            disabled={nimTesting}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold text-white bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 border border-slate-700 disabled:opacity-50 transition-colors shadow-xs"
+          >
+            {nimTesting ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Probing Microservice...</span>
+              </>
+            ) : (
+              <>
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <span>Test NIM Connectivity</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Test Result Feedback */}
+        {nimTestResult && (
+          <div
+            className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 transition-all ${
+              nimTestResult.success
+                ? 'bg-emerald-50/70 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300'
+                : 'bg-amber-50/70 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/60 text-amber-800 dark:text-amber-300'
+            }`}
+          >
+            {nimTestResult.success ? (
+              <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1 space-y-0.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold">
+                  {nimTestResult.success ? 'NVIDIA NIM Microservice Verified' : 'NVIDIA NIM Probe Status'}
+                </span>
+                {nimTestResult.latency_ms && (
+                  <span className="font-mono text-[11px] font-semibold">
+                    Latency: {nimTestResult.latency_ms}ms
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] opacity-90 leading-relaxed">{nimTestResult.message}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* AI Scrutiny Sensitivity Parameters */}

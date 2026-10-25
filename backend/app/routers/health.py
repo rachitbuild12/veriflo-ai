@@ -17,7 +17,10 @@ def health_check():
         "capabilities": {
             "pymupdf_digital_extractor": PYMUPDF_AVAILABLE,
             "paddleocr_scanned_ocr": PADDLE_AVAILABLE,
+            "nvidia_nim_configured": bool(settings.NVIDIA_NIM_API_KEY),
+            "nvidia_nim_model": settings.NVIDIA_NIM_MODEL if settings.NVIDIA_NIM_API_KEY else None,
             "gemini_api_configured": bool(settings.GEMINI_API_KEY),
+            "active_llm_provider": "nvidia_nim" if settings.NVIDIA_NIM_API_KEY else ("gemini" if settings.GEMINI_API_KEY else "offline_deterministic"),
             "sha256_duplicate_detection": True,
             "metadata_alteration_analyzer": True,
             "deterministic_rules_count": 8
