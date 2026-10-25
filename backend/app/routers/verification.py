@@ -114,10 +114,9 @@ def get_nvidia_nim_status() -> Dict[str, Any]:
         "base_url": settings.NVIDIA_NIM_BASE_URL,
         "active_model": settings.NVIDIA_NIM_MODEL,
         "recommended_models": [
-            "meta/llama-3.3-70b-instruct",
-            "nvidia/llama-3.1-nemotron-70b-instruct",
-            "meta/llama-3.1-8b-instruct",
-            "meta/llama-3.2-11b-vision-instruct"
+            "nvidia/nemotron-3.5-bolt-e4b",
+            "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+            "deepseek-ai/deepseek-v4.1-flash"
         ],
         "active_llm_provider": "nvidia_nim" if has_key else ("gemini" if settings.GEMINI_API_KEY else "offline_deterministic")
     }

@@ -37,7 +37,7 @@ export const SettingsPage: React.FC = () => {
 
   // NVIDIA NIM Microservice State
   const [nimApiKey, setNimApiKey] = useState('');
-  const [nimModel, setNimModel] = useState('meta/llama-3.3-70b-instruct');
+  const [nimModel, setNimModel] = useState('nvidia/nemotron-3.5-bolt-e4b');
   const [nimConfigured, setNimConfigured] = useState(false);
   const [nimMaskedKey, setNimMaskedKey] = useState('');
   const [nimTesting, setNimTesting] = useState(false);
@@ -189,10 +189,9 @@ export const SettingsPage: React.FC = () => {
               onChange={(e) => setNimModel(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-xs focus:ring-1 focus:ring-teal-500 focus:outline-none"
             >
-              <option value="meta/llama-3.3-70b-instruct">meta/llama-3.3-70b-instruct (Recommended - 70B Deep Scrutiny)</option>
-              <option value="nvidia/llama-3.1-nemotron-70b-instruct">nvidia/llama-3.1-nemotron-70b-instruct (Structured JSON Alignment)</option>
-              <option value="meta/llama-3.1-8b-instruct">meta/llama-3.1-8b-instruct (Ultra-Low Latency Extraction)</option>
-              <option value="meta/llama-3.2-11b-vision-instruct">meta/llama-3.2-11b-vision-instruct (Multimodal Infrastructure Vision)</option>
+              <option value="nvidia/nemotron-3.5-bolt-e4b">nvidia/nemotron-3.5-bolt-e4b (Recommended - Ultra Fast 400ms Structured JSON)</option>
+              <option value="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning">nvidia/nemotron-3-nano-omni-30b-a3b-reasoning (Deep Regulatory Scrutiny)</option>
+              <option value="deepseek-ai/deepseek-v4.1-flash">deepseek-ai/deepseek-v4.1-flash (High Throughput Batch Inference)</option>
             </select>
             <p className="text-[11px] text-slate-400">
               OpenAI-compatible microservice hosted at <code className="text-teal-600 dark:text-teal-400 font-mono">https://integrate.api.nvidia.com/v1</code>.
